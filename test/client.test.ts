@@ -11,6 +11,32 @@ import {
   requiredEnvironment,
   trimTrailingSlash
 } from '../src/client.js';
+import { loadGitLabInstances, selectGitLabInstance } from '../src/config.js';
+
+test('loadGitLabInstances falls back to a single GITLAB_BASE_URL/GITLAB_TOKEN pair', () => {
+  const instances = loadGitLabInstances({
+    GITLAB_BASE_URL: 'https://gitlab.example.com/',
+    GITLAB_TOKEN: 'token'
+  } as NodeJS.ProcessEnv);
+  assert.deepEqual(instances, [{ name: 'default', baseUrl: 'https://gitlab.example.com', token: 'token' }]);
+});
+
+test('loadGitLabInstances reads GITLAB_INSTANCES for multiple hosts', () => {
+  const instances = loadGitLabInstances({
+    GITLAB_INSTANCES: JSON.stringify([
+      { name: 'work', baseUrl: 'https://gitlab.work.example.com', token: 'a' },
+      { name: 'personal', baseUrl: 'https://gitlab.com', token: 'b' }
+    ])
+  } as NodeJS.ProcessEnv);
+  assert.equal(instances.length, 2);
+  assert.equal(selectGitLabInstance(instances, 'personal').baseUrl, 'https://gitlab.com');
+  assert.equal(selectGitLabInstance(instances, undefined).name, 'work');
+  assert.throws(() => selectGitLabInstance(instances, 'missing'), /Unknown GitLab instance/);
+});
+
+test('loadGitLabInstances throws when nothing is configured', () => {
+  assert.throws(() => loadGitLabInstances({} as NodeJS.ProcessEnv), /Missing GitLab configuration/);
+});
 
 test('trimTrailingSlash removes one trailing slash', () => {
   assert.equal(trimTrailingSlash('https://gitlab.example.com/'), 'https://gitlab.example.com');

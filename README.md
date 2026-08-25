@@ -1,4 +1,6 @@
-# GitLab Jira Context MCP
+# contextloom-mcp
+
+_Renamed from `gitlab-jira-context-mcp`; GitHub redirects the old URL._
 
 <p align="center">
   <img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript">
@@ -17,7 +19,7 @@ The server uses stdio and runs on your machine. It sends requests only to the se
 
 ```mermaid
 flowchart LR
-  Client[VS Code / MCP Client] <-->|stdio| Server[GitLab Jira Context MCP]
+  Client[VS Code / MCP Client] <-->|stdio| Server[contextloom-mcp]
   Server -->|REST API| GitLab[GitLab]
   Server -->|REST API| Jira[Jira]
   Server -. optional REST API .-> Confluence[Confluence]
@@ -64,9 +66,11 @@ Jira search, comments, and worklogs return the service's pagination metadata. Wh
 ## Repository Structure
 
 ```text
-gitlab-jira-context-mcp/
+contextloom-mcp/
 ├── src/
 │   ├── client.ts       # HTTP clients, authentication, and request helpers
+│   ├── proxy.ts        # Proxy-aware fetch dispatcher shared by every client
+│   ├── config.ts       # GitLab instance resolution (single host or GITLAB_INSTANCES)
 │   └── server.ts       # MCP tool registration and input schemas
 ├── test/
 │   └── client.test.ts  # Focused helper and request-payload tests
@@ -79,7 +83,7 @@ gitlab-jira-context-mcp/
 
 - Node.js 20 or newer
 - An MCP client with stdio server support, such as Visual Studio Code with GitHub Copilot
-- A GitLab personal access token with access to the projects you need
+- A GitLab personal access token with access to the projects you need (or several, via `GITLAB_INSTANCES`)
 - A Jira Server or Data Center personal access token
 - Optional: a Confluence Server or Data Center personal access token
 - Optional: a Grafana service account token with dashboard read access
@@ -90,8 +94,8 @@ gitlab-jira-context-mcp/
 1. Clone the repository and install dependencies.
 
    ```bash
-   git clone https://github.com/jagarkarlo/gitlab-jira-context-mcp.git
-   cd gitlab-jira-context-mcp
+   git clone https://github.com/jagarkarlo/contextloom-mcp.git
+   cd contextloom-mcp
    npm install
    npm test
    npm run build
@@ -103,18 +107,18 @@ gitlab-jira-context-mcp/
    cp .env.example .env
    ```
 
-    Set `GITLAB_BASE_URL`, `GITLAB_TOKEN`, `JIRA_BASE_URL`, and `JIRA_API_TOKEN`. Confluence and Grafana are optional; set both variables in either integration's pair to enable its tools. Set `GITHUB_TOKEN` to enable GitHub tools; `GITHUB_API_BASE_URL` is optional for GitHub Enterprise Server. Keep `.env` local; it is ignored by Git.
+    Set `GITLAB_BASE_URL`, `GITLAB_TOKEN`, `JIRA_BASE_URL`, and `JIRA_API_TOKEN`. Use `GITLAB_INSTANCES` instead of the single GitLab pair to talk to more than one host. Confluence and Grafana are optional; set both variables in either integration's pair to enable its tools. Set `GITHUB_TOKEN` to enable GitHub tools; `GITHUB_API_BASE_URL` is optional for GitHub Enterprise Server. Set `HTTPS_PROXY`/`NO_PROXY` only if reaching one of these hosts needs a corporate proxy. Keep `.env` local; it is ignored by Git.
 
 3. Register the compiled server in your MCP client. In VS Code, run `MCP: Open User Configuration` and add this entry to the `servers` object. Replace `/absolute/path/to` with the cloned repository path.
 
    ```json
    {
      "servers": {
-       "gitlab-jira-context": {
+       "contextloom": {
          "type": "stdio",
          "command": "node",
          "args": [
-           "/absolute/path/to/gitlab-jira-context-mcp/dist/server.js"
+           "/absolute/path/to/contextloom-mcp/dist/server.js"
          ]
        }
      }
@@ -122,6 +126,13 @@ gitlab-jira-context-mcp/
    ```
 
 4. Restart the server from `MCP: List Servers` or reload VS Code.
+
+## Multiple GitLab hosts
+
+Every `gitlab_*` tool accepts an optional `instance` argument. With a single
+`GITLAB_BASE_URL`/`GITLAB_TOKEN` pair it is unnecessary. With `GITLAB_INSTANCES`
+set to a JSON array of `{ "name", "baseUrl", "token" }` objects, pass `instance`
+to pick one; omitting it uses the first entry.
 
 ## Security
 
@@ -132,6 +143,7 @@ gitlab-jira-context-mcp/
 - Verify the issue key, work duration, and content before setting `confirm: true` for a Jira write.
 - Use a fine-grained GitHub token scoped only to the repositories and contents permissions you need.
 - Read the existing file with `github_get_file_content` and pass its returned SHA when updating a GitHub file.
+- A corporate proxy dispatcher (via `undici`) is only attached for a host when `HTTPS_PROXY`/`HTTP_PROXY` is set and that host is not covered by `NO_PROXY` — Node's global `fetch` does not read those variables on its own, unlike curl.
 
 ## Configuration Boundaries
 
@@ -153,7 +165,7 @@ npm run build
 git diff --check
 ```
 
-`src/client.ts` contains the HTTP and response-handling helpers. `src/server.ts` registers the MCP tools and their input schemas. Tests cover the shared client helpers; add focused tests when changing behavior.
+`src/client.ts` contains the HTTP and response-handling helpers. `src/proxy.ts` holds the proxy-aware fetch dispatcher shared by every client. `src/config.ts` resolves one or more GitLab instances from the environment. `src/server.ts` registers the MCP tools and their input schemas. Tests cover the shared client helpers; add focused tests when changing behavior.
 
 ## Roadmap
 

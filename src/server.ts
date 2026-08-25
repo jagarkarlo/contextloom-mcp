@@ -17,13 +17,24 @@ import {
   trimTrailingSlash,
   type ServiceConnection
 } from './client.js';
+import { loadGitLabInstances, selectGitLabInstance } from './config.js';
 
 loadEnv();
 
-const gitlab: ServiceConnection = {
-  baseUrl: trimTrailingSlash(requiredEnvironment(process.env, 'GITLAB_BASE_URL')),
-  token: requiredEnvironment(process.env, 'GITLAB_TOKEN')
-};
+const gitlabInstances = loadGitLabInstances(process.env);
+const instanceSchema =
+  gitlabInstances.length > 1
+    ? z
+        .string()
+        .min(1)
+        .describe(`One of the configured GitLab instances: ${gitlabInstances.map((i) => i.name).join(', ')}`)
+        .optional()
+    : z.string().min(1).optional();
+
+function gitlab(instance?: string): ServiceConnection {
+  return selectGitLabInstance(gitlabInstances, instance);
+}
+
 const jira: ServiceConnection = {
   baseUrl: trimTrailingSlash(requiredEnvironment(process.env, 'JIRA_BASE_URL')),
   token: requiredEnvironment(process.env, 'JIRA_API_TOKEN')
@@ -59,8 +70,8 @@ function githubContentPath(repository: string, filePath: string): string {
 }
 
 const server = new McpServer({
-  name: 'gitlab-jira-context',
-  version: '0.1.0'
+  name: 'contextloom',
+  version: '0.3.0'
 });
 
 const jiraIssueKey = z
@@ -75,12 +86,13 @@ server.registerTool(
   {
     description: 'List GitLab projects visible to the configured token.',
     inputSchema: {
+      instance: instanceSchema,
       limit: z.number().int().min(1).max(100).default(20)
     }
   },
-  async ({ limit }) =>
+  async ({ instance, limit }) =>
     textResult(
-      await fetchGitLab(gitlab, `/api/v4/projects?simple=true&membership=true&per_page=${limit}`)
+      await fetchGitLab(gitlab(instance), `/api/v4/projects?simple=true&membership=true&per_page=${limit}`)
     )
 );
 
@@ -88,10 +100,10 @@ server.registerTool(
   'gitlab_get_project',
   {
     description: 'Get a GitLab project by numeric ID or URL-encoded path.',
-    inputSchema: { project: z.string().min(1) }
+    inputSchema: { instance: instanceSchema, project: z.string().min(1) }
   },
-  async ({ project }) =>
-    textResult(await fetchGitLab(gitlab, `/api/v4/projects/${encodeURIComponent(project)}`))
+  async ({ instance, project }) =>
+    textResult(await fetchGitLab(gitlab(instance), `/api/v4/projects/${encodeURIComponent(project)}`))
 );
 
 server.registerTool(
@@ -99,18 +111,19 @@ server.registerTool(
   {
     description: 'List GitLab merge requests visible to the configured token.',
     inputSchema: {
+      instance: instanceSchema,
       project: z.string().min(1).optional(),
       scope: z.enum(['created_by_me', 'assigned_to_me', 'all']).default('created_by_me'),
       state: z.enum(['opened', 'closed', 'locked', 'merged', 'all']).default('all'),
       limit: z.number().int().min(1).max(100).default(20)
     }
   },
-  async ({ project, scope, state, limit }) => {
+  async ({ instance, project, scope, state, limit }) => {
     const query = `scope=${scope}&state=${state}&order_by=updated_at&sort=desc&per_page=${limit}`;
     const path = project
       ? `/api/v4/projects/${encodeURIComponent(project)}/merge_requests?${query}`
       : `/api/v4/merge_requests?${query}`;
-    return textResult(await fetchGitLab(gitlab, path));
+    return textResult(await fetchGitLab(gitlab(instance), path));
   }
 );
 
@@ -119,14 +132,15 @@ server.registerTool(
   {
     description: 'Get one GitLab merge request and its metadata.',
     inputSchema: {
+      instance: instanceSchema,
       project: z.string().min(1),
       mergeRequestIid: z.number().int().positive()
     }
   },
-  async ({ project, mergeRequestIid }) =>
+  async ({ instance, project, mergeRequestIid }) =>
     textResult(
       await fetchGitLab(
-        gitlab,
+        gitlab(instance),
         `/api/v4/projects/${encodeURIComponent(project)}/merge_requests/${mergeRequestIid}`
       )
     )
@@ -137,18 +151,19 @@ server.registerTool(
   {
     description: 'List recent CI/CD pipelines for a GitLab project.',
     inputSchema: {
+      instance: instanceSchema,
       project: z.string().min(1),
       ref: z.string().min(1).optional(),
       status: z.enum(['created', 'waiting_for_resource', 'preparing', 'pending', 'running', 'success', 'failed', 'canceled', 'skipped', 'manual', 'scheduled']).optional(),
       limit: z.number().int().min(1).max(100).default(20)
     }
   },
-  async ({ project, ref, status, limit }) => {
+  async ({ instance, project, ref, status, limit }) => {
     const query = new URLSearchParams({ per_page: String(limit) });
     if (ref) query.set('ref', ref);
     if (status) query.set('status', status);
     return textResult(
-      await fetchGitLab(gitlab, `/api/v4/projects/${encodeURIComponent(project)}/pipelines?${query}`)
+      await fetchGitLab(gitlab(instance), `/api/v4/projects/${encodeURIComponent(project)}/pipelines?${query}`)
     );
   }
 );
@@ -158,15 +173,16 @@ server.registerTool(
   {
     description: 'Read one file from a GitLab repository at a branch, tag, or commit ref.',
     inputSchema: {
+      instance: instanceSchema,
       project: z.string().min(1),
       path: z.string().min(1),
       ref: z.string().min(1).default('HEAD')
     }
   },
-  async ({ project, path, ref }) =>
+  async ({ instance, project, path, ref }) =>
     textResult(
       await fetchGitLab(
-        gitlab,
+        gitlab(instance),
         `/api/v4/projects/${encodeURIComponent(project)}/repository/files/${encodeURIComponent(path)}?ref=${encodeURIComponent(ref)}`
       )
     )

@@ -1,3 +1,5 @@
+import { proxiedFetch } from './proxy.js';
+
 export type JsonValue = string | number | boolean | null | JsonObject | JsonValue[];
 export type JsonObject = { [key: string]: JsonValue };
 
@@ -70,7 +72,7 @@ export async function fetchGitLab(
   connection: ServiceConnection,
   path: string
 ): Promise<JsonValue> {
-  const response = await fetch(`${connection.baseUrl}${path}`, {
+  const response = await proxiedFetch(`${connection.baseUrl}${path}`, {
     headers: {
       'PRIVATE-TOKEN': connection.token,
       Accept: 'application/json'
@@ -90,7 +92,7 @@ export async function fetchJira(
   path: string,
   init?: RequestInit
 ): Promise<JsonValue> {
-  const response = await fetch(`${connection.baseUrl}${path}`, {
+  const response = await proxiedFetch(`${connection.baseUrl}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${connection.token}`,
@@ -145,7 +147,7 @@ export async function fetchBearerApi(
   connection: ServiceConnection,
   path: string
 ): Promise<JsonValue> {
-  const response = await fetch(`${connection.baseUrl}${path}`, {
+  const response = await proxiedFetch(`${connection.baseUrl}${path}`, {
     headers: {
       Authorization: `Bearer ${connection.token}`,
       Accept: 'application/json'
@@ -165,7 +167,7 @@ export async function fetchGitHub(
   path: string,
   init?: RequestInit
 ): Promise<JsonValue> {
-  const response = await fetch(`${connection.baseUrl}${path}`, {
+  const response = await proxiedFetch(`${connection.baseUrl}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${connection.token}`,
