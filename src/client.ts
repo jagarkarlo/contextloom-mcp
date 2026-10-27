@@ -186,6 +186,22 @@ export async function fetchGitHub(
   return body;
 }
 
+/** Encodes each segment separately: encodeURIComponent('owner/repo') would escape the slash. */
+export function githubRepositoryPath(repository: string): string {
+  const [owner, name, ...rest] = repository.split('/');
+  if (!owner || !name || rest.length > 0) {
+    throw new Error('Use owner/repository.');
+  }
+  return `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
+}
+
+export function githubContentPath(repository: string, filePath: string): string {
+  return `${githubRepositoryPath(repository)}/contents/${filePath
+    .split('/')
+    .map(encodeURIComponent)
+    .join('/')}`;
+}
+
 export function githubFileRequest(
   content: string,
   message: string,

@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  githubContentPath,
   githubFileRequest,
+  githubRepositoryPath,
   jiraCommentRequest,
   jiraWorklogRequestWithStart,
   jiraWorklogRequest,
@@ -96,6 +98,16 @@ test('GitHub file writes encode UTF-8 content and retain update controls', () =>
     method: 'PUT',
     body: '{"message":"docs: add example","content":"SGVsbG8sIHdvcmxkIQ==","branch":"main","sha":"current-sha"}'
   });
+});
+
+test('GitHub repository paths keep the owner/name slash literal', () => {
+  assert.equal(githubRepositoryPath('octo-org/hello world'), '/repos/octo-org/hello%20world');
+  assert.equal(
+    githubContentPath('octo-org/app', 'docs/read me.md'),
+    '/repos/octo-org/app/contents/docs/read%20me.md'
+  );
+  assert.throws(() => githubRepositoryPath('missing-name'), /owner\/repository/);
+  assert.throws(() => githubRepositoryPath('a/b/c'), /owner\/repository/);
 });
 
 test('parseJsonResponse parses JSON and retains plain text', async () => {

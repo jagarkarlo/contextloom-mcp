@@ -6,7 +6,9 @@ import {
   fetchBearerApi,
   fetchGitHub,
   fetchGitLab,
+  githubContentPath,
   githubFileRequest,
+  githubRepositoryPath,
   fetchJira,
   jiraCommentRequest,
   jiraWorklogRequestWithStart,
@@ -60,13 +62,6 @@ function requiredGitHubIntegration() {
   }
 
   return github;
-}
-
-function githubContentPath(repository: string, filePath: string): string {
-  return `/repos/${encodeURIComponent(repository)}/contents/${filePath
-    .split('/')
-    .map(encodeURIComponent)
-    .join('/')}`;
 }
 
 const server = new McpServer({
@@ -222,7 +217,7 @@ server.registerTool(
     inputSchema: { repository: z.string().regex(/^[^/]+\/[^/]+$/, 'Use owner/repository.') }
   },
   async ({ repository }) =>
-    textResult(await fetchGitHub(requiredGitHubIntegration(), `/repos/${encodeURIComponent(repository)}`))
+    textResult(await fetchGitHub(requiredGitHubIntegration(), githubRepositoryPath(repository)))
 );
 
 server.registerTool(
