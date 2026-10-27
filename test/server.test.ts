@@ -48,3 +48,20 @@ test('configured groups register independently and status never echoes tokens', 
     }
   );
 });
+
+test('tools carry read-only or write annotations and writes require confirm: true', async () => {
+  await withServer(
+    { JIRA_BASE_URL: 'https://jira.invalid', JIRA_API_TOKEN: 'fake-token-value-123' },
+    async (client) => {
+      const tools = new Map((await client.listTools()).tools.map((tool) => [tool.name, tool]));
+      assert.equal(tools.get('jira_get_issue')?.annotations?.readOnlyHint, true);
+      assert.equal(tools.get('jira_add_comment')?.annotations?.readOnlyHint, false);
+      const result = await client.callTool({
+        name: 'jira_add_comment',
+        arguments: { issueKey: 'DEMO-1', comment: 'hello' }
+      });
+      assert.equal(result.isError, true);
+      assert.match(JSON.stringify(result.content), /confirm/);
+    }
+  );
+});

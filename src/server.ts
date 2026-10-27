@@ -71,10 +71,14 @@ const server = new McpServer({
 });
 
 // Tool groups are named by prefix; groups without credentials are removed before connecting.
+const WRITE_TOOLS = new Set(['jira_add_comment', 'jira_add_worklog', 'github_create_or_update_file']);
 const registeredTools = new Map<string, RegisteredTool>();
 const registerTool = server.registerTool.bind(server) as (name: string, config: unknown, callback: unknown) => RegisteredTool;
-server.registerTool = ((name: string, config: unknown, callback: unknown) => {
-  const tool = registerTool(name, config, callback);
+server.registerTool = ((name: string, config: object, callback: unknown) => {
+  const annotations = WRITE_TOOLS.has(name)
+    ? { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }
+    : { readOnlyHint: true, openWorldHint: name !== 'contextloom_status' };
+  const tool = registerTool(name, { annotations, ...config }, callback);
   registeredTools.set(name, tool);
   return tool;
 }) as McpServer['registerTool'];
