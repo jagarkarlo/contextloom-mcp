@@ -21,7 +21,9 @@ import {
 import { loadGitLabInstances, selectGitLabInstance } from './config.js';
 import { rememberSecret } from './redact.js';
 import { ApiSourceClient, loadApiSources } from './sources.js';
+import { lintNotes } from './lint.js';
 import { freshnessOf, NOTE_KINDS, NotesStore } from './notes.js';
+import { buildCatalog, buildMap, buildPassages, buildSource, RECALL_BUDGETS, type RecallLevel } from './recall.js';
 
 loadEnv();
 
@@ -77,7 +79,13 @@ const server = new McpServer({
 });
 
 // Tool groups are named by prefix; groups without credentials are removed before connecting.
-const WRITE_TOOLS = new Set(['jira_add_comment', 'jira_add_worklog', 'github_create_or_update_file', 'notes_save']);
+const WRITE_TOOLS = new Set([
+  'jira_add_comment',
+  'jira_add_worklog',
+  'github_create_or_update_file',
+  'notes_save',
+  'notes_delete'
+]);
 const registeredTools = new Map<string, RegisteredTool>();
 const registerTool = server.registerTool.bind(server) as (name: string, config: unknown, callback: unknown) => RegisteredTool;
 server.registerTool = ((name: string, config: object, callback: unknown) => {
@@ -632,6 +640,70 @@ server.registerTool(
     const note = requiredNotes().save(input);
     return textResult({ id: note.id, kind: note.kind, updatedAt: note.updatedAt, freshness: freshnessOf(note) });
   }
+);
+
+server.registerTool(
+  'notes_delete',
+  {
+    description: 'Delete one note by id. Requires confirm: true.',
+    inputSchema: {
+      id: z.string().min(1),
+      confirm: z.literal(true).describe('Must be true to confirm deleting this note.')
+    }
+  },
+  async ({ id }) => {
+    const deleted = requiredNotes().delete(id);
+    if (!deleted) throw new Error(`No note with id ${id}.`);
+    return textResult({ id, deleted: true });
+  }
+);
+
+server.registerTool(
+  'notes_recall',
+  {
+    description:
+      'Progressive 4-level recall over durable notes, cheapest first. L1: map of holdings and freshness. L2: one line per match (requires query). L3: matching heading-chunked passages (requires query). L4: full note or section paged by offset (requires id).',
+    inputSchema: {
+      level: z.number().int().min(1).max(4).default(1),
+      query: z.string().optional(),
+      id: z.string().min(1).optional(),
+      section: z.number().int().min(0).optional(),
+      offset: z.number().int().min(0).default(0),
+      project: z.string().min(1).optional(),
+      kind: z.enum(NOTE_KINDS).optional(),
+      limit: z.number().int().min(1).max(25).default(8),
+      maxChars: z.number().int().min(400).max(20_000).optional()
+    }
+  },
+  async ({ level, query, id, section, offset, project, kind, limit, maxChars }) => {
+    const store = requiredNotes();
+    const budget = maxChars ?? RECALL_BUDGETS[level as RecallLevel];
+    if (level === 1) return textResult(buildMap(store, { maxChars: budget }), budget);
+    if (level === 2) {
+      if (!query) throw new Error('Level 2 recall requires query.');
+      return textResult(buildCatalog(store, query, { project, kind, limit, maxChars: budget }), budget);
+    }
+    if (level === 3) {
+      if (!query) throw new Error('Level 3 recall requires query.');
+      return textResult(buildPassages(store, query, { project, kind, limit, maxChars: budget }), budget);
+    }
+    if (!id) throw new Error('Level 4 recall requires id.');
+    const note = store.get(id);
+    if (!note) throw new Error(`No note with id ${id}.`);
+    return textResult(buildSource(note, { section, offset, maxChars: budget }));
+  }
+);
+
+server.registerTool(
+  'notes_lint',
+  {
+    description:
+      'Score durable notes against North Star quality targets (sourced, current, no duplicates, map within budget) and list actionable fixes.',
+    inputSchema: {
+      limit: z.number().int().min(1).max(100).default(25)
+    }
+  },
+  async ({ limit }) => textResult(lintNotes(requiredNotes(), { limit }))
 );
 
 async function main(): Promise<void> {

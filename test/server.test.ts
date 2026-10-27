@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { resolve } from 'node:path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -64,4 +66,46 @@ test('tools carry read-only or write annotations and writes require confirm: tru
       assert.match(JSON.stringify(result.content), /confirm/);
     }
   );
+});
+
+test('notes tools support save, 4-level recall, lint and confirmed delete over stdio', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'contextloom-stdio-notes-'));
+  try {
+    await withServer({ CONTEXTLOOM_NOTES_DIR: dir }, async (client) => {
+      const saved = await client.callTool({
+        name: 'notes_save',
+        arguments: {
+          id: 'proxy-note',
+          kind: 'runbook',
+          title: 'Use undici ProxyAgent behind HTTPS_PROXY',
+          summary: 'Node fetch ignores proxy env vars.',
+          content: '## Cause\nGlobal fetch skips HTTPS_PROXY.\n\n## Fix\nAttach ProxyAgent for non-NO_PROXY hosts.',
+          project: 'contextloom',
+          sources: [{ label: 'undici', url: 'https://undici.nodejs.org/' }],
+          verifiedAt: '2026-10-27T00:00:00Z'
+        }
+      });
+      assert.ok(!saved.isError);
+
+      const l3 = await client.callTool({
+        name: 'notes_recall',
+        arguments: { level: 3, query: 'ProxyAgent' }
+      });
+      const l3Text = (l3.content as Array<{ text: string }>)[0]!.text;
+      assert.match(l3Text, /"heading": "Fix"/);
+
+      const lint = await client.callTool({ name: 'notes_lint', arguments: {} });
+      const lintText = (lint.content as Array<{ text: string }>)[0]!.text;
+      assert.match(lintText, /"score": 100/);
+
+      const del = await client.callTool({
+        name: 'notes_delete',
+        arguments: { id: 'proxy-note', confirm: true }
+      });
+      const delText = (del.content as Array<{ text: string }>)[0]!.text;
+      assert.match(delText, /"deleted": true/);
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
