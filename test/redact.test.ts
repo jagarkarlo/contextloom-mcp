@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { textResult } from '../src/client.js';
+import { budgetedText, textResult } from '../src/client.js';
 import { redactText, redactValue, rememberSecret, upstreamErrorHint } from '../src/redact.js';
 
 test('redactValue masks credential keys and common token formats', () => {
@@ -27,6 +27,17 @@ test('configured secrets are removed even when echoed in plain or URL-encoded fo
     'echo [REDACTED] and [REDACTED]'
   );
   assert.equal(textResult({ echo: 'configured-value/with+chars' }).content[0]?.text.includes('configured'), false);
+});
+
+test('budgetedText keeps small values intact and fits escaped previews within the budget', () => {
+  assert.equal(budgetedText({ ok: true }, 1_000), '{\n  "ok": true\n}');
+  for (const value of [{ body: '"\\\n'.repeat(5_000) }, Array.from({ length: 50 }, (_, i) => ({ i, text: 'x'.repeat(200) }))]) {
+    const text = budgetedText(value, 1_000);
+    assert.ok(text.length <= 1_000, `length ${text.length}`);
+    const parsed = JSON.parse(text) as { truncated: boolean; note: string };
+    assert.equal(parsed.truncated, true);
+    assert.match(parsed.note, /not complete data/);
+  }
 });
 
 test('upstream error hints are short, redacted and never the full body', () => {

@@ -206,8 +206,32 @@ export function githubFileRequest(
   };
 }
 
-export function textResult(body: JsonValue) {
+export const DEFAULT_MAX_OUTPUT_CHARS = 16_000;
+
+function outputBudget(): number {
+  const configured = Number(process.env.CONTEXTLOOM_MAX_OUTPUT_CHARS);
+  return Number.isInteger(configured) && configured >= 1_000 ? configured : DEFAULT_MAX_OUTPUT_CHARS;
+}
+
+/** Serializes within maxChars; oversized values become an explicit, never silent, preview. */
+export function budgetedText(value: unknown, maxChars = outputBudget()): string {
+  const full = JSON.stringify(redactValue(value), null, 2) ?? 'null';
+  if (full.length <= maxChars) return full;
+
+  const note = `Truncated: the full result is ${full.length} characters. Narrow the query, lower limit, or paginate; this preview is not complete data.`;
+  const wrap = (length: number) => JSON.stringify({ truncated: true, note, preview: full.slice(0, length) }, null, 2);
+  let lower = 0;
+  let upper = full.length;
+  while (lower < upper) {
+    const middle = Math.ceil((lower + upper) / 2);
+    if (wrap(middle).length <= maxChars) lower = middle;
+    else upper = middle - 1;
+  }
+  return wrap(lower);
+}
+
+export function textResult(body: JsonValue, maxChars?: number) {
   return {
-    content: [{ type: 'text' as const, text: JSON.stringify(redactValue(body), null, 2) }]
+    content: [{ type: 'text' as const, text: budgetedText(body, maxChars) }]
   };
 }
