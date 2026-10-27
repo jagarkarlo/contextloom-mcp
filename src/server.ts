@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, type RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { config as loadEnv } from 'dotenv';
 import { z } from 'zod';
@@ -14,7 +14,6 @@ import {
   jiraWorklogRequestWithStart,
   optionalConnection,
   optionalGitHubConnection,
-  requiredEnvironment,
   textResult,
   trimTrailingSlash,
   type ServiceConnection
@@ -38,10 +37,7 @@ function gitlab(instance?: string): ServiceConnection {
   return selectGitLabInstance(gitlabInstances, instance);
 }
 
-const jira: ServiceConnection = {
-  baseUrl: trimTrailingSlash(requiredEnvironment(process.env, 'JIRA_BASE_URL')),
-  token: requiredEnvironment(process.env, 'JIRA_API_TOKEN')
-};
+const jira = optionalConnection(process.env, 'JIRA_BASE_URL', 'JIRA_API_TOKEN');
 const confluence = optionalConnection(process.env, 'CONFLUENCE_BASE_URL', 'CONFLUENCE_API_TOKEN');
 const grafana = optionalConnection(process.env, 'GRAFANA_BASE_URL', 'GRAFANA_API_TOKEN');
 const github = optionalGitHubConnection(process.env);
@@ -73,6 +69,38 @@ const server = new McpServer({
   name: 'contextloom',
   version: '0.3.0'
 });
+
+// Tool groups are named by prefix; groups without credentials are removed before connecting.
+const registeredTools = new Map<string, RegisteredTool>();
+const registerTool = server.registerTool.bind(server) as (name: string, config: unknown, callback: unknown) => RegisteredTool;
+server.registerTool = ((name: string, config: unknown, callback: unknown) => {
+  const tool = registerTool(name, config, callback);
+  registeredTools.set(name, tool);
+  return tool;
+}) as McpServer['registerTool'];
+
+const integrations = {
+  gitlab: gitlabInstances.length > 0,
+  github: Boolean(github),
+  jira: Boolean(jira),
+  confluence: Boolean(confluence),
+  grafana: Boolean(grafana)
+};
+
+server.registerTool(
+  'contextloom_status',
+  {
+    description:
+      'Report which integrations are configured (credential presence only, not live connectivity). Never returns secrets.',
+    inputSchema: {}
+  },
+  async () =>
+    textResult({
+      integrations,
+      gitlabInstances: gitlabInstances.map((instance) => ({ name: instance.name, baseUrl: instance.baseUrl })),
+      note: 'Unconfigured integrations expose no tools. Configuration presence does not prove the credentials work.'
+    })
+);
 
 const jiraIssueKey = z
   .string()
@@ -279,7 +307,7 @@ server.registerTool(
     const jql = encodeURIComponent('assignee = currentUser() ORDER BY updated DESC');
     return textResult(
       await fetchJira(
-        jira,
+        requiredIntegration(jira, 'Jira'),
         `/rest/api/2/search?jql=${jql}&maxResults=${limit}&fields=summary,status,assignee,updated,issuetype,priority,project`
       )
     );
@@ -295,7 +323,7 @@ server.registerTool(
   async ({ issueKey }) =>
     textResult(
       await fetchJira(
-        jira,
+        requiredIntegration(jira, 'Jira'),
         `/rest/api/2/issue/${encodeURIComponent(issueKey)}?fields=summary,description,status,assignee,reporter,comment,issuetype,priority,project,labels,updated`
       )
     )
@@ -314,7 +342,7 @@ server.registerTool(
   async ({ jql, startAt, limit }) =>
     textResult(
       await fetchJira(
-        jira,
+        requiredIntegration(jira, 'Jira'),
         `/rest/api/2/search?jql=${encodeURIComponent(jql)}&startAt=${startAt}&maxResults=${limit}&fields=summary,status,assignee,updated,issuetype,priority,project,labels`
       )
     )
@@ -333,7 +361,7 @@ server.registerTool(
   async ({ issueKey, startAt, limit }) =>
     textResult(
       await fetchJira(
-        jira,
+        requiredIntegration(jira, 'Jira'),
         `/rest/api/2/issue/${encodeURIComponent(issueKey)}/comment?startAt=${startAt}&maxResults=${limit}`
       )
     )
@@ -352,7 +380,7 @@ server.registerTool(
   async ({ issueKey, startAt, limit }) =>
     textResult(
       await fetchJira(
-        jira,
+        requiredIntegration(jira, 'Jira'),
         `/rest/api/2/issue/${encodeURIComponent(issueKey)}/worklog?startAt=${startAt}&maxResults=${limit}`
       )
     )
@@ -365,7 +393,7 @@ server.registerTool(
     inputSchema: { issueKey: jiraIssueKey }
   },
   async ({ issueKey }) =>
-    textResult(await fetchJira(jira, `/rest/api/2/issue/${encodeURIComponent(issueKey)}/transitions`))
+    textResult(await fetchJira(requiredIntegration(jira, 'Jira'), `/rest/api/2/issue/${encodeURIComponent(issueKey)}/transitions`))
 );
 
 server.registerTool(
@@ -377,7 +405,7 @@ server.registerTool(
   async ({ issueKey }) =>
     textResult(
       await fetchJira(
-        jira,
+        requiredIntegration(jira, 'Jira'),
         `/rest/api/2/issue/${encodeURIComponent(issueKey)}?expand=changelog&fields=none`
       )
     )
@@ -396,7 +424,7 @@ server.registerTool(
   async ({ issueKey, comment }) =>
     textResult(
       await fetchJira(
-        jira,
+        requiredIntegration(jira, 'Jira'),
         `/rest/api/2/issue/${encodeURIComponent(issueKey)}/comment`,
         jiraCommentRequest(comment)
       )
@@ -418,7 +446,7 @@ server.registerTool(
   async ({ issueKey, timeSpent, comment, started }) =>
     textResult(
       await fetchJira(
-        jira,
+        requiredIntegration(jira, 'Jira'),
         `/rest/api/2/issue/${encodeURIComponent(issueKey)}/worklog`,
         jiraWorklogRequestWithStart(timeSpent, comment, started)
       )
@@ -496,6 +524,10 @@ server.registerTool(
 );
 
 async function main(): Promise<void> {
+  for (const [name, tool] of registeredTools) {
+    const group = name.split('_')[0] as keyof typeof integrations;
+    if (group in integrations && !integrations[group]) tool.remove();
+  }
   await server.connect(new StdioServerTransport());
 }
 

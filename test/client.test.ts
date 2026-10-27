@@ -36,8 +36,13 @@ test('loadGitLabInstances reads GITLAB_INSTANCES for multiple hosts', () => {
   assert.throws(() => selectGitLabInstance(instances, 'missing'), /Unknown GitLab instance/);
 });
 
-test('loadGitLabInstances throws when nothing is configured', () => {
-  assert.throws(() => loadGitLabInstances({} as NodeJS.ProcessEnv), /Missing GitLab configuration/);
+test('loadGitLabInstances returns no instances when nothing is configured', () => {
+  assert.deepEqual(loadGitLabInstances({} as NodeJS.ProcessEnv), []);
+  assert.throws(() => selectGitLabInstance([], undefined), /GitLab is not configured/);
+  assert.throws(
+    () => loadGitLabInstances({ GITLAB_BASE_URL: 'https://gitlab.example.com' } as NodeJS.ProcessEnv),
+    /Set both GITLAB_BASE_URL and GITLAB_TOKEN/
+  );
 });
 
 test('trimTrailingSlash removes one trailing slash', () => {

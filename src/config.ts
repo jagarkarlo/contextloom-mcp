@@ -25,18 +25,19 @@ export function loadGitLabInstances(environment: NodeJS.ProcessEnv): GitLabInsta
 
   const baseUrl = environment.GITLAB_BASE_URL;
   const token = environment.GITLAB_TOKEN;
-  if (!baseUrl || !token) {
-    throw new Error(
-      'Missing GitLab configuration: set GITLAB_BASE_URL and GITLAB_TOKEN, or GITLAB_INSTANCES for multiple hosts'
-    );
+  if (Boolean(baseUrl) !== Boolean(token)) {
+    throw new Error('Set both GITLAB_BASE_URL and GITLAB_TOKEN, or GITLAB_INSTANCES for multiple hosts');
   }
-  return [{ name: 'default', baseUrl: trimTrailingSlash(baseUrl), token }];
+  return baseUrl && token ? [{ name: 'default', baseUrl: trimTrailingSlash(baseUrl), token }] : [];
 }
 
 export function selectGitLabInstance(
   instances: GitLabInstance[],
   name: string | undefined
 ): GitLabInstance {
+  if (instances.length === 0) {
+    throw new Error('GitLab is not configured. Set GITLAB_BASE_URL and GITLAB_TOKEN or GITLAB_INSTANCES.');
+  }
   if (!name) return instances[0]!;
   const match = instances.find((instance) => instance.name === name);
   if (!match) {
