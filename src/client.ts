@@ -230,7 +230,7 @@ export function budgetedText(value: unknown, maxChars = outputBudget()): string 
   return wrap(lower);
 }
 
-export function textResult(body: JsonValue, maxChars?: number) {
+export function textResult(body: unknown, maxChars?: number) {
   return {
     content: [{ type: 'text' as const, text: budgetedText(body, maxChars) }]
   };

@@ -16,12 +16,12 @@ import {
   optionalGitHubConnection,
   textResult,
   trimTrailingSlash,
-  type JsonValue,
   type ServiceConnection
 } from './client.js';
 import { loadGitLabInstances, selectGitLabInstance } from './config.js';
 import { rememberSecret } from './redact.js';
 import { ApiSourceClient, loadApiSources } from './sources.js';
+import { freshnessOf, NOTE_KINDS, NotesStore } from './notes.js';
 
 loadEnv();
 
@@ -45,6 +45,8 @@ const grafana = optionalConnection(process.env, 'GRAFANA_BASE_URL', 'GRAFANA_API
 const github = optionalGitHubConnection(process.env);
 const apiSources = loadApiSources(process.env);
 const apiClient = new ApiSourceClient(process.env);
+const notesDirectory = process.env.CONTEXTLOOM_NOTES_DIR?.trim();
+const notes = notesDirectory ? new NotesStore(notesDirectory) : undefined;
 
 for (const connection of [...gitlabInstances, jira, confluence, grafana, github]) {
   rememberSecret(connection?.token);
@@ -75,13 +77,14 @@ const server = new McpServer({
 });
 
 // Tool groups are named by prefix; groups without credentials are removed before connecting.
-const WRITE_TOOLS = new Set(['jira_add_comment', 'jira_add_worklog', 'github_create_or_update_file']);
+const WRITE_TOOLS = new Set(['jira_add_comment', 'jira_add_worklog', 'github_create_or_update_file', 'notes_save']);
 const registeredTools = new Map<string, RegisteredTool>();
 const registerTool = server.registerTool.bind(server) as (name: string, config: unknown, callback: unknown) => RegisteredTool;
 server.registerTool = ((name: string, config: object, callback: unknown) => {
+  const local = name === 'contextloom_status' || name.startsWith('notes_');
   const annotations = WRITE_TOOLS.has(name)
-    ? { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }
-    : { readOnlyHint: true, openWorldHint: name !== 'contextloom_status' };
+    ? { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: !local }
+    : { readOnlyHint: true, openWorldHint: !local };
   const tool = registerTool(name, { annotations, ...config }, callback);
   registeredTools.set(name, tool);
   return tool;
@@ -93,7 +96,8 @@ const integrations = {
   jira: Boolean(jira),
   confluence: Boolean(confluence),
   grafana: Boolean(grafana),
-  api: apiSources.length > 0
+  api: apiSources.length > 0,
+  notes: Boolean(notes)
 };
 
 server.registerTool(
@@ -534,7 +538,7 @@ server.registerTool(
   async ({ source: id, ...options }) => {
     const source = apiSources.find((candidate) => candidate.id === id);
     if (!source) throw new Error(`Unknown API source "${id}". Configured: ${apiSources.map((s) => s.id).join(', ')}`);
-    return textResult((await apiClient.get(source, options)) as JsonValue);
+    return textResult(await apiClient.get(source, options));
   }
 );
 
@@ -571,6 +575,63 @@ server.registerTool(
         `/api/dashboards/uid/${encodeURIComponent(uid)}`
       )
     )
+);
+
+function requiredNotes(): NotesStore {
+  if (!notes) throw new Error('Notes are not configured. Set CONTEXTLOOM_NOTES_DIR.');
+  return notes;
+}
+
+server.registerTool(
+  'notes_search',
+  {
+    description:
+      'Search durable local notes (verified findings, decisions, runbooks). Results include freshness; stale, expired or unverified notes are leads to re-check, not facts.',
+    inputSchema: {
+      query: z.string().default(''),
+      project: z.string().min(1).optional(),
+      kind: z.enum(NOTE_KINDS).optional(),
+      limit: z.number().int().min(1).max(25).default(8)
+    }
+  },
+  async ({ query, project, kind, limit }) => textResult(requiredNotes().search(query, { project, kind, limit }))
+);
+
+server.registerTool(
+  'notes_get',
+  {
+    description: 'Read one note in full, including its sources and freshness.',
+    inputSchema: { id: z.string().min(1) }
+  },
+  async ({ id }) => {
+    const note = requiredNotes().get(id);
+    if (!note) throw new Error(`No note with id ${id}.`);
+    return textResult({ ...note, freshness: freshnessOf(note) });
+  }
+);
+
+server.registerTool(
+  'notes_save',
+  {
+    description:
+      'Save or update (pass id) one verified, reusable note as Markdown. Include sources and verifiedAt; set expiresAt for volatile facts. Search first to avoid duplicates. Never store secrets, raw logs or guesses.',
+    inputSchema: {
+      id: z.string().min(1).optional(),
+      kind: z.enum(NOTE_KINDS).default('fact'),
+      title: z.string().min(1).max(160),
+      summary: z.string().min(1).max(500),
+      content: z.string().min(1).max(20_000),
+      project: z.string().min(1).optional(),
+      tags: z.array(z.string().min(1)).max(20).optional(),
+      sources: z.array(z.object({ label: z.string().min(1), url: z.string().url() })).max(20).optional(),
+      verifiedAt: z.string().datetime({ offset: true }).optional(),
+      expiresAt: z.string().datetime({ offset: true }).optional()
+    }
+  },
+  async (input) => {
+    const note = requiredNotes().save(input);
+    return textResult({ id: note.id, kind: note.kind, updatedAt: note.updatedAt, freshness: freshnessOf(note) });
+  }
 );
 
 async function main(): Promise<void> {
