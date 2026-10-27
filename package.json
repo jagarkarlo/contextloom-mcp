@@ -1,6 +1,6 @@
 {
   "name": "contextloom-mcp",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Bounded, redacted MCP context tools for GitLab, Jira, Confluence, Grafana, GitHub, configurable HTTPS APIs and durable Markdown notes. Every integration optional, every write confirmed.",
   "type": "module",
   "scripts": {

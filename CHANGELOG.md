@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0
+
+### Added
+
+- `notes_recall`: 4-level progressive recall (`1` map, `2` one-line catalog interleaving whole-note and passage hits, `3` heading-chunked passages, `4` paged full source).
+- `notes_lint`: scores durable notes against North Star quality targets (`sourced`, `current`, `duplicates` via Jaccard title similarity, `mapChars`) and lists actionable fixes.
+- `notes_delete`: deletes a note by ID after `confirm: true`.
+- Heading-aware Markdown passage chunker (`src/chunks.ts`).
+
 ## 0.4.0
 
 ### Added
