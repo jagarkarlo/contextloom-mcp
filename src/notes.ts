@@ -44,7 +44,7 @@ function slug(title: string): string {
 }
 
 function terms(text: string): string[] {
-  return text.toLowerCase().match(/[a-z0-9][a-z0-9._-]*/g) ?? [];
+  return text.toLowerCase().match(/[a-z0-9]+(?:[._-][a-z0-9]+)*/g) ?? [];
 }
 
 /** Durable, human-editable notes: one Markdown file per note, the files are the source of truth. */
