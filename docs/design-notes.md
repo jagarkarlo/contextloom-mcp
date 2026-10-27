@@ -72,6 +72,12 @@ build your own.
 - **Refuse secrets on write.** Store where a credential lives, never its value.
 - **Version the directory with Git.** Every change becomes reviewable and
   revertible without inventing an undo system.
+- **Recall cheapest first.** Level 1 map (~1.8 KB), Level 2 one-line catalog
+  (~3 KB, interleaving whole-note and passage rankings), Level 3 heading-chunked
+  passages (~5 KB), Level 4 paged source (~12 KB).
+- **Lint against measurable targets.** Score `sourced` (100%), `current` (>=80%),
+  `duplicates` (0 via Jaccard title similarity) and `mapChars` so drift surfaces
+  with concrete fixes.
 
 ## Collecting data in bulk
 

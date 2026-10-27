@@ -66,6 +66,9 @@ The server never exposes an HTTP endpoint. Tokens stay in your local `.env` file
 | `notes_search` | Search durable notes; results carry `current`, `stale`, `expired` or `unverified` freshness. |
 | `notes_get` | Read one note in full, including sources. |
 | `notes_save` | Save or update one verified note with sources, `verifiedAt` and optional `expiresAt`. |
+| `notes_delete` | Delete one note by ID after passing `confirm: true`. |
+| `notes_recall` | Progressive 4-level recall (`1` map, `2` catalog, `3` heading passages, `4` paged source). |
+| `notes_lint` | Score notes against North Star targets (sourced, current, no duplicates, map budget) with fixes. |
 
 Tools appear only for integrations whose settings are complete, so the server starts with nothing configured and exposes just `contextloom_status`. Every tool carries MCP annotations (`readOnlyHint`, `openWorldHint`) so clients can apply their own approval policy. Jira mutations and GitHub file writes additionally require `confirm: true` and use the permissions of the configured token.
 
@@ -81,7 +84,10 @@ contextloom-mcp/
 │   ├── redact.ts       # Credential redaction for output and error messages
 │   ├── oauth.ts        # Cached OAuth2 client-credentials provider
 │   ├── sources.ts      # Configured API sources and bounded GET
-│   ├── notes.ts        # Markdown notes with provenance and freshness
+│   ├── notes.ts        # Markdown notes with provenance, freshness and delete
+│   ├── chunks.ts       # Heading-aware Markdown passage chunker
+│   ├── recall.ts       # 4-level progressive recall over durable notes
+│   ├── lint.ts         # North Star health linter and duplicate detection
 │   ├── proxy.ts        # Proxy-aware fetch dispatcher shared by every client
 │   ├── config.ts       # GitLab instance resolution (single host or GITLAB_INSTANCES)
 │   └── server.ts       # MCP tool registration, annotations and optional groups
