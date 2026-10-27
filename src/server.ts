@@ -73,7 +73,7 @@ function requiredGitHubIntegration() {
 
 const server = new McpServer({
   name: 'contextloom',
-  version: '0.3.0'
+  version: '0.4.0'
 });
 
 // Tool groups are named by prefix; groups without credentials are removed before connecting.

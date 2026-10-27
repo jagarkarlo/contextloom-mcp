@@ -1,7 +1,7 @@
 {
   "name": "contextloom-mcp",
-  "version": "0.3.0",
-  "description": "GitLab, Jira, Confluence, Grafana and GitHub context tools for Model Context Protocol clients, with multi-host GitLab support and confirmed writes.",
+  "version": "0.4.0",
+  "description": "Bounded, redacted MCP context tools for GitLab, Jira, Confluence, Grafana, GitHub, configurable HTTPS APIs and durable Markdown notes. Every integration optional, every write confirmed.",
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
