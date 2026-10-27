@@ -1,0 +1,29 @@
+{
+  "sources": [
+    {
+      "id": "status-page",
+      "description": "Public service status, no credentials needed.",
+      "baseUrl": "https://status.example.com/api",
+      "auth": { "type": "none" },
+      "allowPaths": ["/v2"]
+    },
+    {
+      "id": "inventory",
+      "description": "Internal inventory API using a bearer token from the environment.",
+      "baseUrl": "https://inventory.example.com/api",
+      "auth": { "type": "bearer", "tokenEnv": "INVENTORY_TOKEN" }
+    },
+    {
+      "id": "ml-tracking",
+      "description": "Service-to-service access through an OAuth2 client-credentials grant.",
+      "baseUrl": "https://tracking.example.com/api",
+      "auth": {
+        "type": "oauth-client-credentials",
+        "tokenUrl": "https://id.example.com/realms/services/protocol/openid-connect/token",
+        "clientIdEnv": "TRACKING_CLIENT_ID",
+        "clientSecretEnv": "TRACKING_CLIENT_SECRET"
+      },
+      "allowPaths": ["/jobs", "/experiments"]
+    }
+  ]
+}
