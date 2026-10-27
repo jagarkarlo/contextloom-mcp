@@ -1,4 +1,5 @@
 import { boundedRequest } from './http.js';
+import { redactValue, upstreamErrorHint } from './redact.js';
 
 export type JsonValue = string | number | boolean | null | JsonObject | JsonValue[];
 export type JsonObject = { [key: string]: JsonValue };
@@ -76,7 +77,7 @@ async function requestJson(service: string, url: string, init: RequestInit): Pro
   const body = parseJsonText(response.text);
 
   if (!response.ok) {
-    throw new Error(`${service} request failed (${response.status}): ${JSON.stringify(body)}`);
+    throw new Error(`${service} request failed (HTTP ${response.status})${upstreamErrorHint(body)}`);
   }
 
   return body;
@@ -207,6 +208,6 @@ export function githubFileRequest(
 
 export function textResult(body: JsonValue) {
   return {
-    content: [{ type: 'text' as const, text: JSON.stringify(body, null, 2) }]
+    content: [{ type: 'text' as const, text: JSON.stringify(redactValue(body), null, 2) }]
   };
 }

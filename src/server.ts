@@ -20,6 +20,7 @@ import {
   type ServiceConnection
 } from './client.js';
 import { loadGitLabInstances, selectGitLabInstance } from './config.js';
+import { rememberSecret } from './redact.js';
 
 loadEnv();
 
@@ -44,6 +45,10 @@ const jira: ServiceConnection = {
 const confluence = optionalConnection(process.env, 'CONFLUENCE_BASE_URL', 'CONFLUENCE_API_TOKEN');
 const grafana = optionalConnection(process.env, 'GRAFANA_BASE_URL', 'GRAFANA_API_TOKEN');
 const github = optionalGitHubConnection(process.env);
+
+for (const connection of [...gitlabInstances, jira, confluence, grafana, github]) {
+  rememberSecret(connection?.token);
+}
 
 function requiredIntegration(
   connection: ServiceConnection | undefined,
