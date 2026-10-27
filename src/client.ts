@@ -1,4 +1,4 @@
-import { proxiedFetch } from './proxy.js';
+import { boundedRequest } from './http.js';
 
 export type JsonValue = string | number | boolean | null | JsonObject | JsonValue[];
 export type JsonObject = { [key: string]: JsonValue };
@@ -56,7 +56,10 @@ export function optionalGitHubConnection(
 }
 
 export async function parseJsonResponse(response: Response): Promise<JsonValue> {
-  const text = await response.text();
+  return parseJsonText(await response.text());
+}
+
+export function parseJsonText(text: string): JsonValue {
   if (!text) {
     return null;
   }
@@ -68,23 +71,27 @@ export async function parseJsonResponse(response: Response): Promise<JsonValue> 
   }
 }
 
+async function requestJson(service: string, url: string, init: RequestInit): Promise<JsonValue> {
+  const response = await boundedRequest(url, init);
+  const body = parseJsonText(response.text);
+
+  if (!response.ok) {
+    throw new Error(`${service} request failed (${response.status}): ${JSON.stringify(body)}`);
+  }
+
+  return body;
+}
+
 export async function fetchGitLab(
   connection: ServiceConnection,
   path: string
 ): Promise<JsonValue> {
-  const response = await proxiedFetch(`${connection.baseUrl}${path}`, {
+  return requestJson('GitLab', `${connection.baseUrl}${path}`, {
     headers: {
       'PRIVATE-TOKEN': connection.token,
       Accept: 'application/json'
     }
   });
-  const body = await parseJsonResponse(response);
-
-  if (!response.ok) {
-    throw new Error(`GitLab request failed (${response.status}): ${JSON.stringify(body)}`);
-  }
-
-  return body;
 }
 
 export async function fetchJira(
@@ -92,7 +99,7 @@ export async function fetchJira(
   path: string,
   init?: RequestInit
 ): Promise<JsonValue> {
-  const response = await proxiedFetch(`${connection.baseUrl}${path}`, {
+  return requestJson('Jira', `${connection.baseUrl}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${connection.token}`,
@@ -101,13 +108,6 @@ export async function fetchJira(
       ...(init?.headers ?? {})
     }
   });
-  const body = await parseJsonResponse(response);
-
-  if (!response.ok) {
-    throw new Error(`Jira request failed (${response.status}): ${JSON.stringify(body)}`);
-  }
-
-  return body;
 }
 
 export function jiraCommentRequest(comment: string): RequestInit {
@@ -147,19 +147,12 @@ export async function fetchBearerApi(
   connection: ServiceConnection,
   path: string
 ): Promise<JsonValue> {
-  const response = await proxiedFetch(`${connection.baseUrl}${path}`, {
+  return requestJson(service, `${connection.baseUrl}${path}`, {
     headers: {
       Authorization: `Bearer ${connection.token}`,
       Accept: 'application/json'
     }
   });
-  const body = await parseJsonResponse(response);
-
-  if (!response.ok) {
-    throw new Error(`${service} request failed (${response.status}): ${JSON.stringify(body)}`);
-  }
-
-  return body;
 }
 
 export async function fetchGitHub(
@@ -167,7 +160,7 @@ export async function fetchGitHub(
   path: string,
   init?: RequestInit
 ): Promise<JsonValue> {
-  const response = await proxiedFetch(`${connection.baseUrl}${path}`, {
+  return requestJson('GitHub', `${connection.baseUrl}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${connection.token}`,
@@ -177,13 +170,6 @@ export async function fetchGitHub(
       ...(init?.headers ?? {})
     }
   });
-  const body = await parseJsonResponse(response);
-
-  if (!response.ok) {
-    throw new Error(`GitHub request failed (${response.status}): ${JSON.stringify(body)}`);
-  }
-
-  return body;
 }
 
 /** Encodes each segment separately: encodeURIComponent('owner/repo') would escape the slash. */
