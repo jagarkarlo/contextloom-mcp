@@ -120,6 +120,13 @@ export class NotesStore {
     return this.all().find((note) => note.id === id);
   }
 
+  delete(id: string): boolean {
+    const existing = this.get(id);
+    if (!existing) return false;
+    this.remove(existing);
+    return true;
+  }
+
   search(query: string, { project, kind, limit = 10 }: { project?: string; kind?: NoteKind; limit?: number } = {}) {
     const wanted = [...new Set(terms(query))];
     return this.all()

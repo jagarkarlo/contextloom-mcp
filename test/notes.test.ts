@@ -39,6 +39,9 @@ test('notes are Markdown files that round-trip, update in place and rank by fiel
     assert.equal(updated.createdAt, proxy.createdAt);
     assert.equal(store.all().filter((note) => note.id === proxy.id).length, 1);
     assert.equal(store.get(proxy.id)?.kind, 'fact');
+    assert.equal(store.delete(proxy.id), true);
+    assert.equal(store.get(proxy.id), undefined);
+    assert.equal(store.delete(proxy.id), false);
   });
 });
 
